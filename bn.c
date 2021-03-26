@@ -136,13 +136,15 @@ static int bn_cmp(const bn_digit *a,
     if (asize < bsize)
         return -1;
 
+    a += asize;
+    b += bsize;
     while (asize--) {
+        --a;
+        --b;
         if (*a > *b)
             return 1;
         if (*a < *b)
             return -1;
-        a++;
-        b++;
     }
     return 0;
 }
