@@ -1,5 +1,5 @@
 TARGET := out
-CFLAGS := -Wall -g -O3
+CFLAGS := -Wall -g -O0
 OBJS := bn.o main.o mlock_check.o
 
 .PHONY: all clean

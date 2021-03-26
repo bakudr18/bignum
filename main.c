@@ -16,7 +16,6 @@ static inline long long elapsed(struct timespec *t1, struct timespec *t2)
            (long long) (t2->tv_nsec - t1->tv_nsec);
 }
 
-static void (*lshift)(const bn *, unsigned int, bn *);
 int main(int argc, char **argv)
 {
     configure_malloc_behavior();
@@ -30,49 +29,44 @@ int main(int argc, char **argv)
     assert(check_pagefault(0, 0));
     // struct timespec t1, t2;
 
-    // if (argc != 2)
-        // return -1;
+    uint64_t k = 1;
+    if (argc == 2)
+        k = atoi(argv[1]);
 
-    // lshift = atoi(argv[1]) == 0 ? &bn_lshift_original : &bn_lshift;
 
     bn *n, *dst, *c;
     n = bn_alloc(1);
+    // bn_fib(k, n);
+    // bn_print_dec(n);
     dst = bn_alloc(1);
     c = bn_alloc(1);
-    bn_set_num(n, 0xaaaaULL, 0);
-    bn_set_num(dst, 0xccccULL, 0);
+    bn_set_num(n, 0xaaaa0ULL, 0, 0);
+    bn_set_num(dst, 0x10000ULL, 0, 0);
     // bn_set_num(n, 0x7UL, 1);
 
-    // bn_to_dec_string(n);
-    // bn_to_dec_string(dst);
-
-    // bn_add(n, dst, c);
-    // bn_to_dec_string(c);
+    // bn_mul(n, dst, c);
     // bn_lshift(n, 63, dst);
     // clock_gettime(CLOCK_MONOTONIC, &t1);
     // bn_lshift_original(n, 0, dst);
     // clock_gettime(CLOCK_MONOTONIC, &t2);
     // check_pagefault(0, 0);
 
-    for (unsigned int i = 1; i < 256; i++) {
-        bn_add(n, dst, c);
-        lshift(c, i, dst);
-        bn_add(c, dst, n);
-       // n = bn_alloc(100);
-       // dst = bn_alloc(100);
-       // bn_set_num(n, 0x7777ULL, 0);
-       // clock_gettime(CLOCK_MONOTONIC, &t1);
-       // lshift(n, i, dst);
-       // clock_gettime(CLOCK_MONOTONIC, &t2);
-       // printf("%d %lld\n", i, elapsed(&t1, &t2));
-       // if(i >= 104){
-       char *dec = bn_to_dec_string(n);
-       printf("%s\n", dec);
-       free(dec);
-       // }
-       // bn_free(n);
-       // bn_free(dst);
-       // assert(check_pagefault(0, 0));
+    for (unsigned int i = 1; i < 8; i++) {
+        bn_mul(n, dst, c);
+        bn_print_dec(c);
+        bn_lshift_original(c, i, dst);
+        bn_mul(c, dst, n);
+        // n = bn_alloc(100);
+        // dst = bn_alloc(100);
+        // bn_set_num(n, 0x7777ULL, 0);
+        // clock_gettime(CLOCK_MONOTONIC, &t1);
+        // lshift(n, i, dst);
+        // clock_gettime(CLOCK_MONOTONIC, &t2);
+        // printf("%d %lld\n", i, elapsed(&t1, &t2));
+        bn_print_dec(n);
+        // bn_free(n);
+        // bn_free(dst);
+        // assert(check_pagefault(0, 0));
     }
 
     bn_free(n);
