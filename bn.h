@@ -28,6 +28,8 @@ void bn_add(const bn *a, const bn *b, bn *c);
 
 void bn_mul(const bn *a, const bn *b, bn *c);
 
+void bn_sqr(const bn *a, bn *c);
+
 void bn_fib(uint64_t n, bn *fib);
 
 #endif /* _BN_H */

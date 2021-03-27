@@ -676,6 +676,12 @@ void bn_mul(const bn *a, const bn *b, bn *c)
 {
     ASSERT(a->size != 0);
     ASSERT(b->size != 0);
+    // ASSERT(a == b);
+    if (a == b) {
+        bn_sqr(a, c);
+        return;
+    }
+
 
     if (a->size < b->size)
         SWAP(a, b);
@@ -766,40 +772,167 @@ end:
     }
 }
 
+/*
+ * consider calculating (abc)^2
+ *          a   b   c
+ *       x  a   b   c
+ *  -------------------
+ *         ac  bc  cc
+ *     ab  bb  bc
+ * aa  ab  ac
+ *
+ * instead of calculating the whole abc with n^2 steps,
+ * calculating (ab bc bc) part then double it,
+ * and finally add the (aa bb cc) part at diagonal line
+ */
+void bn_sqr_base(const bn_digit *a, uint64_t size, bn_digit *c)
+{
+    bn_digit *cp = c + 1;
+    const bn_digit *ap = a;
+    uint64_t asize = size - 1;
+    for (uint64_t i = 0; i < asize; i++) {
+        /* calc the (ab bc bc) part */
+        cp[asize - i] = bn_mul_partial(&ap[i + 1], asize - i, ap[i], cp);
+        cp += 2;
+    }
+    /* Double it */
+    for (uint64_t i = 2 * size - 1; i > 0; i--)
+        c[i] = c[i] << 1 | c[i - 1] >> (BN_DIGIT_BITS - 1);
+    c[0] <<= 1;
+
+    /* add the (aa bb cc) part at diagonal line */
+    cp = c;
+    ap = a;
+    asize = size;
+    bn_digit carry = 0;
+    for (uint64_t i = 0; i < asize; i++) {
+        bn_digit high, low;
+        bn_digit_mul(ap[i], ap[i], high, low);
+        high += (low += carry) < carry;
+        high += (cp[0] += low) < low;
+        carry = (cp[1] += high) < high;
+        cp += 2;
+    }
+}
+
+void bn_sqr_karatsuba(const bn_digit *a, uint64_t size, bn_digit *c)
+{
+    const bool odd = size & 1;
+    const uint64_t even_size = size - odd;
+    const uint64_t half_size = even_size / 2;
+
+    const bn_digit *a0 = a, *a1 = a + half_size;
+    bn_digit *c0 = c, *c1 = c + even_size;
+
+    if (half_size >= KARATSUBA_SQR_THRESHOLD) {
+        bn_sqr_karatsuba(a0, half_size, c0);
+        bn_sqr_karatsuba(a1, half_size, c1);
+    } else {
+        bn_sqr_base(a0, half_size, c0);
+        bn_sqr_base(a1, half_size, c1);
+    }
+
+    bn_digit *tmp1 = bn_digit_alloc(2 * even_size);
+    bn_digit *tmp2 = tmp1 + even_size;
+    bn_digit_zero(tmp2, even_size);
+    bn_digit_cpy(c0, even_size, tmp1);
+
+    bn_digit carry;
+    carry = bn_addi_partial(c + half_size, c1, even_size);
+    carry += bn_addi_partial(c + half_size, tmp1, even_size);
+
+    int cmp = bn_cmp(a1, half_size, a0, half_size);
+    if (cmp) {
+        if (cmp < 0)
+            bn_sub_partial(a0, a1, half_size, tmp1);
+        else
+            bn_sub_partial(a1, a0, half_size, tmp1);
+
+        if (half_size >= KARATSUBA_SQR_THRESHOLD)
+            bn_sqr_karatsuba(tmp1, half_size, tmp2);
+        else
+            bn_sqr_base(tmp1, half_size, tmp2);
+
+        carry -= bn_subi_partial(c + half_size, tmp2, even_size);
+    }
+    bn_digit_free(tmp1);
+
+    if (carry) {
+        for (uint64_t i = even_size + half_size; i < (even_size << 1); i++) {
+            bn_digit tmp2 = c[i];
+            carry = (tmp2 += carry) < carry;
+            c[i] = tmp2;
+        }
+        ASSERT(carry == 0);
+    }
+
+    if (odd) {
+        c[even_size << 1] =
+            bn_mul_partial(a, even_size, a[even_size], c + even_size);
+        c[(even_size << 1) + 1] =
+            bn_mul_partial(a, size, a[even_size], c + even_size);
+    }
+}
+
+void bn_sqr(const bn *a, bn *c)
+{
+    uint64_t csize = a->size << 1;
+    bn *tmp = NULL;
+    if (c == a) {
+        tmp = c;
+        c = bn_alloc(csize);
+    } else {
+        bn_resize(c, csize);
+        bn_digit_zero(c->num, csize);
+    }
+
+    if (a->size < KARATSUBA_SQR_THRESHOLD) {
+        bn_sqr_base(a->num, a->size, c->num);
+    } else {
+        bn_sqr_karatsuba(a->num, a->size, c->num);
+    }
+    c->sign = 0;
+    c->size = csize - (c->num[csize - 1] == 0);
+    // bn_trim_size(c);
+    if (tmp) {
+        bn_swap(tmp, c);
+        bn_free(c);
+    }
+}
 
 void bn_fib(uint64_t n, bn *fib)
 {
-    if (unlikely(n <= 2)) {
+    if (unlikely(n < 2)) {
         bn_set_num(fib, n, 0, 0);
         return;
     }
 
-    bn *a1 = fib;
+    bn_resize(fib, 1);
 
-    bn *a0, *tmp, *a;
-    a0 = bn_alloc(1);
-    bn_set_num(a0, 0, 0, 0);
-    // a1 = bn_alloc(1);
-    bn_set_num(a1, 1, 0, 0);
-    tmp = bn_alloc(1);
-    bn_set_num(tmp, 0, 0, 0);
+    bn *f1 = bn_alloc(1);
+    bn_set_num(f1, 0, 0, 0);
+    bn *f2 = fib;
+    bn_set_num(f2, 1, 0, 0);
+    bn *k1 = bn_alloc(1);
+    bn_set_num(k1, 0, 0, 0);
+    bn *k2 = bn_alloc(1);
+    bn_set_num(k2, 0, 0, 0);
 
-    a = bn_alloc(1);
-
-    for (uint64_t k = ((uint64_t) 1) << (62 - __builtin_clzll(n)); k; k >>= 1) {
-        bn_lshift(a0, 1, a);
-        bn_add(a, a1, a);
-        bn_mul(a1, a1, tmp);
-        bn_mul(a0, a0, a0);
-        bn_add(a0, tmp, a0);
-        bn_mul(a1, a, a1);
-        if (k & n) {
-            SWAP(a1, a0);
-            bn_add(a0, a1, a1);
+    for (uint64_t i = ((uint64_t) 1) << (62 - __builtin_clzll(n)); i; i >>= 1) {
+        bn_lshift(f1, 1, k1);
+        bn_add(k1, f2, k1);
+        bn_mul(k1, f2, k2);
+        bn_sqr(f2, k1);
+        bn_swap(f2, k2);
+        bn_sqr(f1, k2);
+        bn_add(k2, k1, f1);
+        if (n & i) {
+            bn_swap(f1, f2);
+            bn_add(f1, f2, f2);
         }
     }
 
-    bn_free(a0);
-    bn_free(tmp);
-    bn_free(a);
+    bn_free(f1);
+    bn_free(k1);
+    bn_free(k2);
 }
