@@ -539,16 +539,16 @@ static bn_digit bn_mul_partial(const bn_digit *a,
     }
 
     bn_digit carry = 0;
-    if (is_power_of_2(k)) {
-        int bits = ilog2(k);
-        const int subp = BN_DIGIT_BITS - bits;
-        for (uint64_t i = 0; i < size; i++) {
-            bn_digit p = a[i];
-            c[i] += (p << bits) | carry;
-            carry = p >> subp;
-        }
-        return carry;
-    }
+    // if (is_power_of_2(k)) {
+    //     int bits = ilog2(k);
+    //     const int subp = BN_DIGIT_BITS - bits;
+    //     for (uint64_t i = 0; i < size; i++) {
+    //         bn_digit p = a[i];
+    //         c[i] += (p << bits) | carry;
+    //         carry = p >> subp;
+    //     }
+    //     return carry;
+    // }
 
     for (uint64_t i = 0; i < size; i++) {
         bn_digit high, low;
@@ -927,7 +927,7 @@ void bn_fib(uint64_t n, bn *fib)
     bn *k2 = bn_alloc(1);
     bn_set_num(k2, 0, 0, 0);
 
-    for (uint64_t i = ((uint64_t) 1) << (62 - __builtin_clzll(n)); i; i >>= 1) {
+    for (uint64_t i = ((uint64_t) 1) << (30 - __builtin_clz(n)); i; i >>= 1) {
         bn_lshift(f1, 1, k1);
         bn_add(k1, f2, k1);
         bn_mul(k1, f2, k2);
