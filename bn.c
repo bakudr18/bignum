@@ -167,6 +167,13 @@ static int bn_cmp(const bn_digit *a,
     return 0;
 }
 
+static void bn_swap(bn *a, bn *b)
+{
+    bn tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
 static void bn_resize(bn *src, uint64_t size)
 {
     ASSERT(src != NULL);
@@ -543,8 +550,7 @@ static bn_digit bn_mul_partial(const bn_digit *a,
     return carry;
 }
 
-/* c[asize + bsize] = a[asize] x b[bsize]
- * TODO: check if c should be clean up first */
+/* c[asize + bsize] = a[asize] x b[bsize] */
 static void bn_mul_base(const bn_digit *a,
                         uint64_t asize,
                         const bn_digit *b,
@@ -719,9 +725,11 @@ void bn_mul(const bn *a, const bn *b, bn *c)
                 bn_mul_karatsuba(adigit, bdigit, bsize, tmp2);
                 bn_digit carry;
                 carry = bn_addi_partial(cdigit, tmp2, bsize * 2);
-                carry = carry ? bn_increment_partial(cdigit + (bsize * 2),
-                                                     csize - (bsize * 2))
-                              : 0;
+                for (uint64_t i = bsize * 2; i < csize; i++) {
+                    bn_digit tmp3 = cdigit[i];
+                    carry = (tmp3 += carry) < carry;
+                    cdigit[i] = tmp3;
+                }
                 ASSERT(carry == 0);
                 cdigit += bsize;
                 csize -= bsize;
@@ -738,9 +746,11 @@ void bn_mul(const bn *a, const bn *b, bn *c)
             bn_mul_base(bdigit, bsize, adigit, asize, tmp2);
             bn_digit carry;
             carry = bn_add_partial(cdigit, tmp2, asize + bsize, cdigit);
-            carry = carry ? bn_increment_partial(cdigit + (asize + bsize),
-                                                 csize - (asize + bsize))
-                          : 0;
+            for (uint64_t i = asize + bsize; i < csize; i++) {
+                bn_digit tmp3 = cdigit[i];
+                carry = (tmp3 += carry) < carry;
+                cdigit[i] = tmp3;
+            }
             ASSERT(carry == 0);
         }
         if (tmp2)
@@ -751,7 +761,7 @@ end:
     c->sign = a->sign ^ b->sign;
     bn_trim_size(c);
     if (tmp) {
-        SWAP(tmp, c);
+        bn_swap(tmp, c);
         bn_free(c);
     }
 }
