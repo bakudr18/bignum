@@ -524,6 +524,7 @@ void bn_add(const bn *a, const bn *b, bn *c)
     }
 }
 
+/* c[size] += a[size] * k, and return the carry */
 static bn_digit bn_mul_partial(const bn_digit *a,
                                uint64_t size,
                                const bn_digit k,
@@ -537,10 +538,18 @@ static bn_digit bn_mul_partial(const bn_digit *a,
         return 0;
     }
 
-    if (is_power_of_2(k))
-        return bn_lshift_mod(a, size, ilog2(k), c);
-
     bn_digit carry = 0;
+    if (is_power_of_2(k)) {
+        int bits = ilog2(k);
+        const int subp = BN_DIGIT_BITS - bits;
+        for (uint64_t i = 0; i < size; i++) {
+            bn_digit p = a[i];
+            c[i] += (p << bits) | carry;
+            carry = p >> subp;
+        }
+        return carry;
+    }
+
     for (uint64_t i = 0; i < size; i++) {
         bn_digit high, low;
         bn_digit_mul(a[i], k, high, low);
